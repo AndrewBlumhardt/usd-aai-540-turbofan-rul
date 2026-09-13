@@ -8,6 +8,18 @@ The project explores how machine learning can estimate the **Remaining Useful Li
 
 The project is currently in the planning and initial development stage. The proposed architecture, tools, models, and repository structure described below may change as the team evaluates the data and completes the course modules.
 
+## Module Roadmap
+
+Each course module builds the corresponding component of this project.
+
+| Week | Component | Deliverable |
+|---|---|---|
+| 2 | Data Lake | FD001 source files, processed data, model artifacts, and predictions stored in Amazon S3. |
+| 3 | Feature Store | Selected engineered engine and sensor features saved in SageMaker Feature Store. |
+| 4 | Model Store | Selected model registered using a Model Group and Model Package, documented with a Model Card. |
+| 5 | Observability | Data-quality, drift, or model-performance monitoring report, with CloudWatch showing system activity. |
+| 6-7 | Integration | Preprocessing, training, evaluation, registration, and batch inference connected through a SageMaker Pipeline, demonstrated in both successful and failed executions. Repository and design document finalized, final video recorded. |
+
 ## Business Context
 
 This project is being developed under the hypothetical business name **AeroReliability Analytics**. The proposed system is intended to demonstrate how RUL predictions could support predictive maintenance decisions for airlines and maintenance, repair, and overhaul providers.
@@ -86,14 +98,15 @@ The preliminary project goal is an RMSE in the approximate range of 15 to 20 cyc
 
 ## Planned MLOps Architecture
 
-The initial design uses Amazon S3 for data and artifact storage, Amazon SageMaker for processing and model training, SageMaker Model Registry for model versioning, and SageMaker Batch Transform for inference. Amazon CloudWatch and SageMaker Model Monitor will provide operational and data-quality monitoring.
+The design uses Amazon S3 as the data lake for source files, processed data, model artifacts, and predictions; SageMaker Processing for data preparation; **SageMaker Feature Store** to hold the selected engineered engine and sensor features; SageMaker for model training; **SageMaker Model Registry** for versioning through a Model Group and Model Package, documented with a **Model Card**; and SageMaker Batch Transform for inference. Amazon CloudWatch and SageMaker Model Monitor provide operational and data-quality monitoring.
 
 ```mermaid
 flowchart TD
     A[NASA C-MAPSS FD001] --> B[Amazon S3]
     B --> C[SageMaker Processing]
-    C --> D[SageMaker Training and Evaluation]
-    D --> E[SageMaker Model Registry]
+    C --> FS[SageMaker Feature Store]
+    FS --> D[SageMaker Training and Evaluation]
+    D --> E[Model Registry: Model Group, Package, Card]
     E --> F[SageMaker Batch Transform]
     F --> G[RUL Predictions]
     C -. logs and metrics .-> H[CloudWatch and Model Monitor]
@@ -118,7 +131,7 @@ usd-aai-540-turbofan-rul/
 ├── notebooks/              # Exploration and model-development notebooks
 ├── src/
 │   ├── data/               # Data loading, validation, and preprocessing
-│   ├── features/           # Feature engineering
+│   ├── features/           # Feature engineering and Feature Store ingestion
 │   ├── models/             # Training and evaluation code
 │   └── deployment/         # Batch inference and deployment code
 ├── tests/                  # Unit and pipeline tests
@@ -142,7 +155,7 @@ The project will progressively add checks for:
 - Valid prediction values and output schemas.
 - Successful batch-inference deployment using sample records.
 
-A future CI/CD workflow may use GitHub Actions and SageMaker Pipelines to run tests, train candidate models, compare performance, register approved artifacts, and require manual approval before deployment.
+The CI/CD workflow uses a **SageMaker Pipeline** to connect preprocessing, training, evaluation, model registration, and batch inference. The pipeline will be demonstrated in both a successful and a deliberately failed execution. GitHub Actions may additionally run repository tests.
 
 ## Monitoring Considerations
 
