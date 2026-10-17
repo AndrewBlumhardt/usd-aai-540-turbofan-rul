@@ -76,15 +76,16 @@ fields @timestamp, @message, prediction_error, engine_id, cycle
                     "type": "metric",
                     "properties": {
                         "metrics": [
-                            ["AWS/Lambda", "Invocations", {"stat": "Sum"}],
-                            [".", "Duration", {"stat": "Average"}],
-                            [".", "Errors", {"stat": "Sum"}],
-                            [".", "Throttles", {"stat": "Sum"}]
+                            ["AAI540/TurbofanRUL", "BatchTransformRMSE", {"stat": "Average"}],
+                            [".", "BatchTransformMAE", {"stat": "Average"}],
+                            [".", "FlaggedDriftFeatures", {"stat": "Maximum"}],
+                            [".", "PipelineSuccessExecutions", {"stat": "Sum"}],
+                            [".", "PipelineFailedExecutions", {"stat": "Sum"}]
                         ],
                         "period": 300,
                         "stat": "Average",
                         "region": self.region,
-                        "title": "Lambda Function Health (Feature Processing)"
+                        "title": "Turbofan RUL Pipeline Metrics (custom)"
                     }
                 },
                 {
