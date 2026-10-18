@@ -11,7 +11,7 @@ An end-to-end MLOps system on Amazon SageMaker that predicts the Remaining Usefu
 |---|---|
 | **Primary notebook (the complete system, Modules 2-7)** | [`final_submission/AAI540_Turbofan_RUL_AWS_SageMaker.ipynb`](final_submission/AAI540_Turbofan_RUL_AWS_SageMaker.ipynb) |
 | SageMaker Pipeline step scripts | [`final_submission/pipeline_scripts/`](final_submission/pipeline_scripts) |
-| CloudWatch dashboard setup | [`final_submission/monitoring/`](final_submission/monitoring) |
+| CloudWatch dashboard setup | [`final_submission/cloudwatch_monitoring_setup.py`](final_submission/cloudwatch_monitoring_setup.py) |
 | Data location and layout (S3) | [`final_submission/data/README.md`](final_submission/data/README.md) |
 | Earlier work, experiments, planning notes | [`archive/`](archive) (not part of the final submission) |
 
@@ -34,20 +34,24 @@ SHAP analysis of the trained XGBoost model (notebook section 15a) shows the engi
 
 ```mermaid
 flowchart TD
-    A[NASA C-MAPSS FD001] --> B[Amazon S3 data lake]
-    B --> C[Feature engineering and 40/10/10/40 partitions]
-    C --> FS[SageMaker Feature Store + Athena]
-    FS --> D[SageMaker XGBoost training]
-    D --> E[Model Registry: Model Group + Package]
-    E --> F[Batch Transform inference]
+    A[NASA C-MAPSS FD001] --> B[S3 raw layer]
+    B --> C[Validation, EDA, feature engineering, 40/10/10/40 partitions]
+    C --> P[S3 processed CSVs]
+    P --> D[SageMaker XGBoost training job]
+    P -. separate copy .-> FS[Feature Store and Athena table]
+    D --> R[Model Registry: package registered from trained model]
+    D --> F[Batch Transform using the trained estimator]
     F --> G[RUL predictions in S3]
-    P[SageMaker Pipeline: validate - train - evaluate - register] --> E
-    C -. metrics .-> H[CloudWatch dashboards + Model Monitor]
-    D -. metrics .-> H
-    F -. metrics .-> H
+    P --> PL[SageMaker Pipeline: validate, train, evaluate, register]
+    P --> MM[Model Monitor baseline vs production partition]
+    D -. metrics .-> CW[CloudWatch dashboards]
+    F -. metrics .-> CW
+    PL -. status .-> CW
 ```
 
-Batch inference was chosen because maintenance predictions are generated periodically; a always-on real-time endpoint would add cost without benefit.
+Training reads the prepared CSVs from S3. The Feature Store holds a separate copy of the engineered features for reuse and lookup. Batch Transform runs from the trained estimator; the registry entry documents the model version but is not what Batch Transform deploys.
+
+Batch inference was chosen because maintenance predictions are generated periodically; an always-on real-time endpoint would add cost without benefit.
 
 ## Where each course component is implemented
 
@@ -73,8 +77,9 @@ All items are sections of the primary notebook; run output is saved in the noteb
 ## Reproducing the run
 
 1. Use SageMaker Studio or a notebook instance with an execution role that can use S3, SageMaker, Athena, Glue, and CloudWatch.
-2. Install dependencies: `pip install -r final_submission/requirements.txt` (the SageMaker Python SDK is pinned to v2).
-3. Open the notebook from inside `final_submission/` (it reads `pipeline_scripts/` by relative path) and run top to bottom. Component flags near the top toggle expensive steps; the notebook includes cost controls.
+2. Install dependencies: `pip install -r final_submission/requirements.txt` (tested with Python 3.12, pandas 2.3.3, scikit-learn 1.7.2 and SageMaker Python SDK 2.257.7; keep the SDK on v2).
+3. Open the notebook from inside `final_submission/` (it reads `pipeline_scripts/` by relative path) and run top to bottom. **Running top to bottom launches billable AWS jobs** (Feature Store, training, Batch Transform, Model Monitor, pipeline executions, dashboards). All `RUN_*` flags near the top default to `True`; set a flag to `False` to skip that stage.
+4. **Cleanup:** when finished, delete the SageMaker pipeline, feature group, model package group, CloudWatch dashboards and alarms, Athena database, and the `aai540-turbofan-rul/` S3 prefix from the AWS console or CLI to avoid ongoing charges.
 
 ## Security, bias, and ethics notes
 
@@ -98,3 +103,4 @@ AI-assisted tools (including GitHub Copilot) were used during development and do
 ## Dataset and license
 
 NASA C-MAPSS Turbofan Engine Degradation dataset, [NASA Prognostics Center of Excellence repository](https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/); use is subject to NASA's terms and attribution requirements. Repository code is released under the license in [`LICENSE`](LICENSE).
+
