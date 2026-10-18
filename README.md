@@ -45,7 +45,9 @@ A fixed rule—replace every five years or after a set number of cycles—assume
 
 This model adds a condition-based signal. It evaluates each engine's recent sensor history and estimates remaining cycles, allowing maintenance to be planned earlier for engines degrading quickly and deferred for engines that remain healthy. It does not replace mandatory inspections, regulated life limits, or engineering judgment.
 
-The method also differs from a single-sensor alarm. A threshold typically reacts after one reading crosses a limit. This model uses the combined pattern of engine age, sensor values, and trailing 5- and 10-cycle means and standard deviations. SHAP analysis shows that the prediction depends most strongly on cycle count and rolling trends in sensors 17, 4, and 3. The result is a planning horizon in cycles rather than only an alert.
+The project did not directly benchmark a fixed-interval maintenance policy, so this rationale is based on the observed lifespan spread rather than a demonstrated cost or safety comparison.
+
+The method also differs from a single-sensor alarm by combining engine age, multiple sensor values, and trailing 5- and 10-cycle means and standard deviations. SHAP analysis shows that the prediction depends most strongly on cycle count and rolling trends in sensors 17, 4, and 3. The result is a planning horizon in cycles rather than only a binary alert. We did not benchmark the model against a single-sensor or threshold-based maintenance policy, so this project does not claim demonstrated superiority over those approaches.
 
 ## Results and interpretation
 
@@ -55,7 +57,7 @@ The method also differs from a single-sensor alarm. A threshold typically reacts
 | SageMaker XGBoost | 10-engine validation partition | approximately 23.0 | Not recorded |
 | SageMaker XGBoost via Batch Transform | 10-engine held-out test partition | **20.10** | **14.10** |
 
-XGBoost substantially improved on the linear benchmark. Its test MAE means that predictions were off by about 14 cycles on average, while its RMSE of 20.10 was at the upper edge of the project's target range of approximately 15–20 cycles.
+XGBoost substantially improved on the linear benchmark. Its test MAE means that predictions were off by about 14 cycles on average. The model approximately achieved the project's 15–20 cycle target, with test RMSE of 20.10 just above its upper boundary.
 
 The result is promising for a course-scale system, but it is not evidence of production readiness:
 
@@ -86,7 +88,7 @@ flowchart TD
     PL -. execution status .-> CW
 ```
 
-Training reads prepared CSV files from S3. Feature Store receives a separate copy of the engineered data for lookup and reuse; it is not the training source. Batch Transform uses the trained estimator directly. The registry records a versioned model package in `PendingManualApproval` status but is not the source of the demonstrated batch job.
+Training reads prepared CSV files from S3. Feature Store receives a separate copy of the engineered data for lookup and reuse; it is not the training source. Batch Transform uses the trained estimator directly. The registry records the candidate version as `PendingManualApproval`. Approval is recorded for governance purposes but is not enforced in the demonstrated Batch Transform path.
 
 Batch inference was selected because maintenance predictions are expected to run periodically. An always-on endpoint would add cost and operational complexity without a corresponding benefit for this use case.
 
@@ -95,6 +97,7 @@ Batch inference was selected because maintenance predictions are expected to run
 - **Data:** FD001 provides 20,631 run-to-failure records from 100 training engines and 13,096 truncated records from another 100 engines.
 - **Labels:** `RUL = engine maximum cycle − current cycle`, capped at 125 cycles.
 - **Partitions:** 40 train, 10 validation, 10 test, and 40 reserved-production engines. Splitting by engine prevents lifecycle leakage between partitions.
+- **Target balance:** Healthy-state records outnumber critical low-RUL records 4.1 to 1. The imbalance was analyzed, but the final system applies neither weighting nor resampling; low-RUL evaluation remains future work.
 - **Features:** Seven constant fields are removed. The final model uses 52 features, including trailing rolling means and standard deviations for eight degradation-sensitive sensors.
 - **Training:** A linear-regression benchmark is compared with managed SageMaker XGBoost training on `ml.m5.large`.
 - **Deployment:** Batch Transform produces test predictions and writes them to S3.
