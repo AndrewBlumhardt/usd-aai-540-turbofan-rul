@@ -1,182 +1,106 @@
-# Turbofan Remaining Useful Life Prediction
+# Turbofan Remaining Useful Life (RUL) Prediction - AeroReliability Analytics
 
-This repository contains a class project for **Machine Learning Operations (MLOps), AAI-540-01**, in the University of San Diego **Master of Science in Applied Artificial Intelligence** program for the Fall 2026 semester.
+**AAI-540 MLOps, Group 4** | University of San Diego, M.S. Applied Artificial Intelligence | Fall 2026
+**Team:** Andrew Blumhardt, Dylan Scott-Dawkins
 
-The project explores how machine learning can estimate the **Remaining Useful Life (RUL)** of aircraft turbofan engines using historical operating conditions and sensor measurements. RUL represents the number of operational cycles an engine is expected to complete before reaching the end of its useful life.
+An end-to-end MLOps system on Amazon SageMaker that predicts the Remaining Useful Life (in operating cycles) of aircraft turbofan engines from sensor data, using the NASA C-MAPSS **FD001** dataset.
 
-## Project Status
+## Start here (for reviewers)
 
-The project is currently in the planning and initial development stage. The proposed architecture, tools, models, and repository structure described below may change as the team evaluates the data and completes the course modules.
+| What | Where |
+|---|---|
+| **Primary notebook (the complete system, Modules 2-7)** | [`final_submission/AAI540_Turbofan_RUL_AWS_SageMaker.ipynb`](final_submission/AAI540_Turbofan_RUL_AWS_SageMaker.ipynb) |
+| SageMaker Pipeline step scripts | [`final_submission/pipeline_scripts/`](final_submission/pipeline_scripts) |
+| CloudWatch dashboard setup | [`final_submission/cloudwatch_monitoring_setup.py`](final_submission/cloudwatch_monitoring_setup.py) |
+| Data location and layout (S3) | [`final_submission/data/README.md`](final_submission/data/README.md) |
+| Earlier work, experiments, planning notes | [`archive/`](archive) (not part of the final submission) |
 
-## Business Context
+Design document, video, and Asana links: _add links here before submission._
 
-This project is being developed under the hypothetical business name **AeroReliability Analytics**. The proposed system is intended to demonstrate how RUL predictions could support predictive maintenance decisions for airlines and maintenance, repair, and overhaul providers.
+## Business problem and ML framing
 
-More accurate RUL estimates could help maintenance teams reduce two competing risks:
+Maintenance performed too late risks unscheduled downtime; maintenance performed too early wastes useful engine life. We frame this as a **supervised regression** problem: given an engine's operating settings and 21 sensor readings, predict the cycles remaining before end of life. Success is measured by **RMSE** (primary, penalizes large misses) and **MAE** (average error in cycles), with a target RMSE near the 15-20 cycle range typical of FD001 baselines. The model is a decision-support concept and not a replacement for qualified maintenance personnel or safety procedures.
 
-- Unscheduled downtime caused by an engine requiring maintenance earlier than expected.
-- Lost useful life caused by servicing an engine before maintenance is necessary.
+## Results
 
-The model is a decision-support concept developed for academic purposes. It is not intended to replace qualified maintenance personnel, required inspections, engineering judgment, or aviation safety regulations.
+| Model | Evaluation set | RMSE (cycles) | MAE (cycles) |
+|---|---|---|---|
+| Linear regression benchmark | Validation | 31.01 | 23.21 |
+| SageMaker XGBoost (Batch Transform) | Held-out test | **20.10** | **14.10** |
 
-## Problem Definition
+SHAP analysis of the trained XGBoost model (notebook section 15a) shows the engine `cycle` count and 10-cycle rolling means of sensors 17, 4 and 3 as the strongest drivers of predictions. Model Monitor profiled 52 features against the training baseline and flagged 2.
 
-The project treats RUL prediction as a **supervised regression problem**. Given the operating history and sensor readings for an engine, the model will predict a continuous value representing the estimated number of cycles remaining.
-
-The primary objectives are to:
-
-- Develop a reproducible data preparation, feature engineering, training, and evaluation pipeline.
-- Establish a linear regression baseline.
-- Compare the baseline with an XGBoost regression model.
-- Evaluate performance using Root Mean Squared Error (RMSE) and Mean Absolute Error (MAE).
-- Deploy the selected model through Amazon SageMaker using a batch-inference workflow.
-- Define basic testing, monitoring, and CI/CD controls for the machine learning lifecycle.
-
-## Dataset
-
-The project uses the **FD001 subset** of NASA's Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) Turbofan Engine Degradation dataset.
-
-FD001 contains:
-
-- 100 training engines operated until failure.
-- 100 test engines with truncated operating histories.
-- One operating condition.
-- One simulated fault mode involving high-pressure compressor degradation.
-- Three operating-setting values and 21 sensor measurements for each operational cycle.
-- Ground-truth RUL values for the test engines.
-
-Only FD001 is included in the initial project scope. The other C-MAPSS subsets introduce additional operating conditions and fault modes that are outside the scope of this semester project.
-
-The dataset is available through the [NASA Prognostics Center of Excellence Data Set Repository](https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/).
-
-## Planned Machine Learning Approach
-
-### Data Preparation
-
-The initial data pipeline will:
-
-1. Parse the whitespace-delimited training, testing, and RUL files.
-2. Assign names to the engine, cycle, operating-setting, and sensor columns.
-3. Check for missing, duplicate, invalid, or inconsistent records.
-4. Calculate the training label as the maximum cycle for an engine minus its current cycle.
-5. Apply an RUL ceiling, initially expected to be 125 cycles.
-6. Remove constant or near-constant fields that provide little predictive value.
-7. Scale features where required by the selected algorithm.
-
-### Exploratory Analysis and Feature Engineering
-
-Exploratory analysis will examine engine lifespans, sensor distributions, correlations, and sensor behavior as engines approach failure. Candidate engineered features include rolling means, standard deviations, and slopes calculated over recent operational cycles.
-
-All records from a single engine will remain in the same training or validation partition. This prevents information from one engine's lifecycle from leaking across dataset partitions.
-
-### Model Training
-
-The team plans to compare:
-
-- **Linear regression**, which will provide a simple and interpretable baseline.
-- **XGBoost regression**, which can capture nonlinear relationships and interactions among sensor measurements.
-
-The NASA-provided test engines will remain isolated for final evaluation. The training engines will be split by engine identifier into training and validation groups for model selection and limited hyperparameter tuning.
-
-### Evaluation
-
-The primary evaluation metric will be RMSE because it places greater weight on large prediction errors. MAE will provide a second measure that is easier to interpret as the average prediction error in operational cycles.
-
-The preliminary project goal is an RMSE in the approximate range of 15 to 20 cycles. Final results will be reported regardless of whether the model reaches that target.
-
-## Planned MLOps Architecture
-
-The initial design uses Amazon S3 for data and artifact storage, Amazon SageMaker for processing and model training, SageMaker Model Registry for model versioning, and SageMaker Batch Transform for inference. Amazon CloudWatch and SageMaker Model Monitor will provide operational and data-quality monitoring.
+## Architecture
 
 ```mermaid
 flowchart TD
-    A[NASA C-MAPSS FD001] --> B[Amazon S3]
-    B --> C[SageMaker Processing]
-    C --> D[SageMaker Training and Evaluation]
-    D --> E[SageMaker Model Registry]
-    E --> F[SageMaker Batch Transform]
-    F --> G[RUL Predictions]
-    C -. logs and metrics .-> H[CloudWatch and Model Monitor]
-    D -. logs and metrics .-> H
-    F -. logs and metrics .-> H
+    A[NASA C-MAPSS FD001] --> B[S3 raw layer]
+    B --> C[Validation, EDA, feature engineering, 40/10/10/40 partitions]
+    C --> P[S3 processed CSVs]
+    P --> D[SageMaker XGBoost training job]
+    P -. separate copy .-> FS[Feature Store and Athena table]
+    D --> R[Model Registry: package registered from trained model]
+    D --> F[Batch Transform using the trained estimator]
+    F --> G[RUL predictions in S3]
+    P --> PL[SageMaker Pipeline: validate, train, evaluate, register]
+    P --> MM[Model Monitor baseline vs production partition]
+    D -. metrics .-> CW[CloudWatch dashboards]
+    F -. metrics .-> CW
+    PL -. status .-> CW
 ```
 
-Batch inference was selected for the initial design because maintenance predictions are expected to be generated periodically. A continuously running real-time endpoint would add cost and operational complexity without being necessary for the initial use case.
+Training reads the prepared CSVs from S3. The Feature Store holds a separate copy of the engineered features for reuse and lookup. Batch Transform runs from the trained estimator; the registry entry documents the model version but is not what Batch Transform deploys.
 
-## Planned Repository Structure
+Batch inference was chosen because maintenance predictions are generated periodically; an always-on real-time endpoint would add cost without benefit.
 
-The following structure is an initial proposal. Directories will be added as the corresponding project work begins.
+## Where each course component is implemented
 
-```text
-usd-aai-540-turbofan-rul/
-├── .github/
-│   └── workflows/          # Planned CI/CD workflows
-├── data/
-│   ├── raw/                # Original FD001 files, excluded from Git
-│   └── processed/          # Prepared and engineered datasets
-├── docs/                   # Design documents and architecture material
-├── notebooks/              # Exploration and model-development notebooks
-├── src/
-│   ├── data/               # Data loading, validation, and preprocessing
-│   ├── features/           # Feature engineering
-│   ├── models/             # Training and evaluation code
-│   └── deployment/         # Batch inference and deployment code
-├── tests/                  # Unit and pipeline tests
-├── .gitignore
-├── requirements.txt
-└── README.md
+All items are sections of the primary notebook; run output is saved in the notebook and an evidence manifest (resource names, ARNs, console links) is written to S3 at the end.
+
+| Module | Component | Notebook section |
+|---|---|---|
+| 2 | S3 data lake (raw FD001 upload) | 3-4 |
+| 3 | Data validation, EDA, RUL labels, label-imbalance analysis, feature engineering, partitions, Athena, **Feature Store** | 5-11 |
+| 4 | Linear-regression benchmark, XGBoost training job, **Model Registry**, **Batch Transform**, SHAP interpretability | 12-15a |
+| 5 | **SageMaker Model Monitor** baseline and drift report | 16 |
+| 6 | **CloudWatch dashboards** and **SageMaker Pipeline (CI/CD)** with a successful run and a deliberately failed run (corrupted training data) | 17 and Module 6 |
+| 7 | Evidence manifest for the demo video | final section |
+
+## Method summary
+
+- **Data:** FD001 has 100 training engines run to failure and 100 truncated test engines (one operating condition, one fault mode). Raw and processed files live in S3 (see `final_submission/data/README.md`); no datasets are committed to Git.
+- **Labels:** RUL = max cycle for an engine minus current cycle, capped at 125.
+- **Features:** Constant sensors removed; rolling mean (5 and 10 cycles) and standard-deviation features per sensor.
+- **Splits:** 40/10/10/40 train/validation/test/production partitions, split by engine ID so no engine appears in more than one partition. The production partition is reserved for monitoring and drift comparison.
+- **Pipeline controls:** `validate_data.py` stops the pipeline on bad input; `evaluate.py` writes metrics the pipeline uses to gate model registration on RMSE.
+
+## Reproducing the run
+
+1. Use SageMaker Studio or a notebook instance with an execution role that can use S3, SageMaker, Athena, Glue, and CloudWatch.
+2. Install dependencies: `pip install -r final_submission/requirements.txt` (tested with Python 3.12, pandas 2.3.3, scikit-learn 1.7.2 and SageMaker Python SDK 2.257.7; keep the SDK on v2).
+3. Open the notebook from inside `final_submission/` (it reads `pipeline_scripts/` by relative path) and run top to bottom. **Running top to bottom launches billable AWS jobs** (Feature Store, training, Batch Transform, Model Monitor, pipeline executions, dashboards). All `RUN_*` flags near the top default to `True`; set a flag to `False` to skip that stage.
+4. **Cleanup:** when finished, delete the SageMaker pipeline, feature group, model package group, CloudWatch dashboards and alarms, Athena database, and the `aai540-turbofan-rul/` S3 prefix from the AWS console or CLI to avoid ongoing charges.
+
+## Security, bias, and ethics notes
+
+The data is simulated and contains no personal information. Access is through the SageMaker execution role with scoped S3 prefixes. Because FD001 covers one operating condition and one fault mode, results should not be generalized to other engines or conditions. Predictions must be reviewed by qualified personnel.
+
+## Repository layout
+
+```
+final_submission/   Final deliverable code (notebook, pipeline scripts, monitoring, data docs)
+archive/            Earlier notebooks, experiments (TCN, LSTM/Transformer, ensembles), planning docs,
+                    and the original planning-stage README. Preserved for reference only.
+LICENSE
 ```
 
-Raw and processed datasets should not be committed to the repository. The `data` directory will contain documentation or placeholder files only, while working datasets will be stored locally or in the project S3 bucket.
+The repository was reorganized from a flat working layout. Tag `v2-working-snapshot` marks the exact state before reorganization, and git history is preserved for every moved file.
 
-## Planned Testing and Deployment Controls
+## AI tool disclosure
 
-The project will progressively add checks for:
+AI-assisted tools (including GitHub Copilot) were used during development and documentation. All code and results were reviewed, executed, and validated by the team. _Team to confirm and expand this statement with specific usage before submission._
 
-- Expected source columns and data types.
-- Missing, duplicate, or invalid records.
-- Correct RUL-label calculation.
-- Separation of engine units across dataset partitions.
-- Accidental training and test leakage.
-- Model performance against defined RMSE and MAE thresholds.
-- Valid prediction values and output schemas.
-- Successful batch-inference deployment using sample records.
+## Dataset and license
 
-A future CI/CD workflow may use GitHub Actions and SageMaker Pipelines to run tests, train candidate models, compare performance, register approved artifacts, and require manual approval before deployment.
+NASA C-MAPSS Turbofan Engine Degradation dataset, [NASA Prognostics Center of Excellence repository](https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/); use is subject to NASA's terms and attribution requirements. Repository code is released under the license in [`LICENSE`](LICENSE).
 
-## Monitoring Considerations
-
-The planned monitoring approach includes:
-
-- Prediction-error monitoring when observed outcomes become available.
-- Input schema and missing-value checks.
-- Feature-distribution and data-drift monitoring.
-- SageMaker job completion and failure status.
-- Processing duration and resource utilization.
-- Batch-inference logs and output validation.
-
-## Project Scope
-
-The initial project will not:
-
-- Use the FD002, FD003, or FD004 datasets.
-- Implement LSTM, transformer, or other deep-learning sequence models.
-- Build a production-scale streaming telemetry platform.
-- Implement formal uncertainty quantification.
-- Use the model as an autonomous aviation maintenance decision system.
-
-## Team
-
-- **Andrew Blumhardt**
-- **Dylan Scott-Dawkins**
-
-## Academic Context
-
-- **University:** University of San Diego
-- **Program:** Master of Science in Applied Artificial Intelligence
-- **Course:** Machine Learning Operations (MLOps), AAI-540-01
-- **Semester:** Fall 2026
-
-## License and Use
-
-This repository is intended for educational and academic use. A formal software license may be added as the project develops. The NASA dataset remains subject to the terms and attribution requirements of its original source.
